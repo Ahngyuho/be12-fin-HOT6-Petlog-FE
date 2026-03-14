@@ -10,11 +10,102 @@ import {
   startOfMonth,
   subMonths,
 } from "date-fns";
-import { computed, ref, watch } from "vue";
+import { computed, ref, watch, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import { useScheduleStore } from "../../../stores/useScheduleStore";
 import { hexToRgba } from "../../../utils/color";
+const x = ref(100);
+const y = ref(100);
+const dragging = ref(false);
+const draggedEvent = ref(null);
+const dropTargetDate = ref(null);
+const draggedEventId = ref(null);
+const ghostX = ref(0);
+const ghostY = ref(0);
+const ghostWidth = ref(0);
+const ghostHeight = ref(0);
 
+let offsetX = 0;
+let offsetY = 0;
+
+function startDrag(mouseEvent, scheduleEvent) {
+  dragging.value = true;
+  draggedEvent.value = scheduleEvent;
+  draggedEventId.value = scheduleEvent.idx;
+
+  const rect = mouseEvent.currentTarget.getBoundingClientRect();
+
+  ghostWidth.value = rect.width;
+  ghostHeight.value = rect.height;
+
+  offsetX = mouseEvent.clientX - rect.left;
+  offsetY = mouseEvent.clientY - rect.top;
+
+  ghostX.value = mouseEvent.clientX - offsetX;
+  ghostY.value = mouseEvent.clientY - offsetY;
+
+  // 화면 전체 추적
+  window.addEventListener("mousemove", onMouseMove);
+  window.addEventListener("mouseup", endDrag);
+
+  // 텍스트 선택 방지용
+  e.preventDefault();
+}
+
+function onMouseMove(mouseEvent) {
+  if (!dragging.value) return;
+
+  ghostX.value = mouseEvent.clientX - offsetX;
+  ghostY.value = mouseEvent.clientY - offsetY;
+}
+
+function endDrag(mouseEvent) {
+  const original = scheduleStore.plans.find(
+    (plan) => plan.idx === draggedEventId.value,
+  );
+
+  if (draggedEvent.value && dropTargetDate.value) {
+    const oldStart = new Date(original.startAt);
+    const oldEnd = new Date(original.endAt);
+
+    const duration = oldEnd.getTime() - oldStart.getTime();
+
+    const newStart = new Date(dropTargetDate.value);
+    newStart.setHours(
+      oldStart.getHours(),
+      oldStart.getMinutes(),
+      oldStart.getSeconds(),
+      oldStart.getMilliseconds(),
+    );
+
+    const newEnd = new Date(newStart.getTime() + duration);
+
+    original.startAt = newStart.toISOString();
+    original.endAt = newEnd.toISOString();
+
+    console.log(original.startAt);
+    console.log(original.endAt);
+  }
+
+  console.log(scheduleStore.plans);
+
+  window.removeEventListener("mousemove", onMouseMove);
+  window.removeEventListener("mouseup", endDrag);
+
+  dragging.value = false;
+  draggedEvent.value = null;
+  dropTargetDate.value = null;
+}
+
+function setDropTarget(item) {
+  if (!dragging.value) return;
+  dropTargetDate.value = format(item.date, "yyyy-MM-dd'T'HH:mm:ss");
+}
+
+onUnmounted(() => {
+  window.removeEventListener("mousemove", onMouseMove);
+  window.removeEventListener("mouseup", endDrag);
+});
 const props = defineProps({
   onOpenModal: Function,
   onDetail: Function,
@@ -70,7 +161,6 @@ const calendarDates = computed(() => {
       isCurrentMonth: false,
     });
   }
-
   return calendar;
 });
 
@@ -92,11 +182,16 @@ const eventsByDate = computed(() => {
 
       result.get(dateStr).push({
         ...event,
-        _position: end ? (isStart ? "start" : isEnd ? "end" : "middle") : "start",
+        _position: end
+          ? isStart
+            ? "start"
+            : isEnd
+              ? "end"
+              : "middle"
+          : "start",
       });
     });
   });
-
   return result;
 });
 
@@ -130,7 +225,10 @@ const handleDateClick = (date) => {
   const clickedYear = date.getFullYear();
 
   // 현재 선택된 달이랑 다르면 변경
-  if (clickedMonth !== currentMonth.value || clickedYear !== currentYear.value) {
+  if (
+    clickedMonth !== currentMonth.value ||
+    clickedYear !== currentYear.value
+  ) {
     currentMonth.value = clickedMonth;
     currentYear.value = clickedYear;
   }
@@ -150,7 +248,9 @@ const handleEventClick = (event) => {
   <div class="calendar_wrapper">
     <div class="calendar_header">
       <div>
-        <span class="month_year">{{ currentYear }}년 {{ currentMonth + 1 }}월</span>
+        <span class="month_year"
+          >{{ currentYear }}년 {{ currentMonth + 1 }}월</span
+        >
         <div class="nav_buttons">
           <div @click="prevMonth" class="prev_btn">
             <img src="/src/assets/icons/arrow_left.svg" alt="prev" />
@@ -182,15 +282,20 @@ const handleEventClick = (event) => {
         :key="item.date.toISOString()"
         :class="{
           not_this_month: !item.isCurrentMonth,
-          today_cell: format(item.date, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd'),
+          today_cell:
+            format(item.date, 'yyyy-MM-dd') ===
+            format(new Date(), 'yyyy-MM-dd'),
         }"
+        @mouseenter="setDropTarget(item)"
       >
         <div
           class="date_number"
           :class="{
             red: isSunday(index),
             blue: isSaturday(index),
-            today_date: format(item.date, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd'),
+            today_date:
+              format(item.date, 'yyyy-MM-dd') ===
+              format(new Date(), 'yyyy-MM-dd'),
           }"
           @click="handleDateClick(item.date)"
         >
@@ -198,20 +303,38 @@ const handleEventClick = (event) => {
         </div>
         <div class="event_wrapper">
           <div
-            v-for="event in eventsByDate.get(format(item.date, 'yyyy-MM-dd')) || []"
+            v-for="event in eventsByDate.get(format(item.date, 'yyyy-MM-dd')) ||
+            []"
             :key="event.idx + '-' + format(item.date, 'yyyy-MM-dd')"
             :class="['event', event._position]"
             :style="{ backgroundColor: hexToRgba(event.color, 0.25) }"
             :title="event.title"
             @click="handleEventClick(event)"
+            @mousedown="startDrag($event, event)"
           >
             <template v-if="event._position === 'start'">
-              <span v-if="scheduleStore.currentPet?.idx == null">[{{ event.petName }}]</span>
+              <span v-if="scheduleStore.currentPet?.idx == null"
+                >[{{ event.petName }}]</span
+              >
               {{ event.title }}
             </template>
           </div>
         </div>
       </div>
+    </div>
+
+    <div
+      v-if="dragging && draggedEvent"
+      class="drag-ghost"
+      :style="{
+        left: ghostX + 'px',
+        top: ghostY + 'px',
+        width: ghostWidth + 'px',
+        height: ghostHeight + 'px',
+        backgroundColor: hexToRgba(draggedEvent.color, 0.25),
+      }"
+    >
+      {{ draggedEvent.title }}
     </div>
   </div>
 </template>
@@ -387,5 +510,16 @@ const handleEventClick = (event) => {
 .event.end {
   color: transparent;
   padding: 0;
+}
+
+.drag-ghost {
+  position: fixed;
+  z-index: 9999;
+  pointer-events: none;
+  border-radius: 6px;
+  opacity: 0.7;
+  padding: 2px 6px;
+  box-sizing: border-box;
+  border: 1px dashed #999;
 }
 </style>
