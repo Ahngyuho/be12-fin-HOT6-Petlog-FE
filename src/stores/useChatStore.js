@@ -2,7 +2,8 @@
 import { defineStore } from "pinia";
 import axios from "axios";
 import SockJS from "sockjs-client";
-import { Client } from "@stomp/stompjs";
+import { Client as StompClient } from "@stomp/stompjs";
+import { io } from "socket.io-client";
 
 export const useChatStore = defineStore("chat", {
   state: () => ({
@@ -22,6 +23,7 @@ export const useChatStore = defineStore("chat", {
     hasNext: true,
     lastUserId: null,
     isParticipating: false,
+    socketClient: null,
   }),
 
   actions: {
@@ -30,10 +32,28 @@ export const useChatStore = defineStore("chat", {
       await this.loadMessages(roomId);
 
       // ✅ 2. WebSocket 연결 및 실시간 구독
-      this.connectStomp(roomId, () => {
+      // this.connectStomp(roomId, () => {
+      //   console.log("📡 실시간 구독 시작!");
+      // });
+
+      this.connectSocketIO(roomId, () => {
         console.log("📡 실시간 구독 시작!");
       });
     },
+
+    bindSocketEvents() {
+    if (!this.socketClient) return;
+
+    this.socketClient.off("chat-message");
+    this.socketClient.on("chat-message", (msg) => {
+      this.messages.push(msg);
+    });
+
+    this.socketClient.off("disconnect");
+    this.socketClient.on("disconnect", (reason) => {
+      console.log("연결 종료:", reason);
+    });
+  },
 
     async leaveChatRoom(roomIdx) {
       await axios.delete(`/api/chat/chatroom/${roomIdx}/leave`);
@@ -61,6 +81,36 @@ export const useChatStore = defineStore("chat", {
         console.error("❌ 메시지 로딩 실패:", e);
       }
     },
+
+connectSocketIO(roomId, onConnectedCallback) {
+  const socket = io("ws://localhost:3000", {
+    reconnectionDelayMax: 10000,
+    auth: {
+      token: "123",
+    },
+    query: {
+      "my-key": "my-value",
+    },
+  });
+
+  this.socketClient = socket;
+
+  this.bindSocketEvents();
+
+
+  socket.on("connect", () => {
+    console.log("연결 성공");
+    socket.emit("join-room", { roomId });
+  });
+
+  socket.on("connect_error", (err) => {
+    console.error("연결 실패:", err.message);
+  });
+
+  socket.on("disconnect", (reason) => {
+    console.log("연결 종료:", reason);
+  });
+},
     connectStomp(roomId, onConnectedCallback) {
       const socket = new SockJS("/api/ws");
 
@@ -90,6 +140,36 @@ export const useChatStore = defineStore("chat", {
     },
 
     sendMessage(message, roomId, type) {
+      const msg = {
+    roomId,
+    content: {
+      type,
+      ...message,
+    },
+    timestamp: new Date().toISOString(),
+  };
+
+  if (!this.socketClient || !this.socketClient.connected) {
+    console.warn("⛔ Socket.IO 연결되지 않음");
+    return;
+  }
+
+  this.socketClient.emit("chat-message", msg, (ack) => {
+    console.log("서버 ack:", ack);
+  });
+
+      // if (this.stompClient && this.stompClient.connected) {
+      //   this.stompClient.publish({
+      //     destination: `/app/chat/${roomId}`,
+      //     body: JSON.stringify(msg),
+      //   });
+      // } else {
+      //   console.warn("⛔ STOMP 연결되지 않음 (테스트 메시지 추가)");
+      //   this.messages.push({ ...msg, testMode: true });
+      // }
+    },
+
+    sendMessageToSocket(message, roomId, type) {
       const msg = {
         chatroomId: roomId,
         content: {

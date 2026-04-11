@@ -67,12 +67,12 @@ const adminOnlyGuard = (to, from, next) => {
 
 const requireLogin = (to, from, next) => {
   const userStore = useUserStore();
-  if (!userStore.isLogin) {
-    alert("로그인이 필요한 페이지입니다.");
-    next("/user/login"); // 로그인 페이지로 리다이렉트
-  } else {
+  // if (!userStore.isLogin) {
+  //   alert("로그인이 필요한 페이지입니다.");
+  //   next("/user/login"); // 로그인 페이지로 리다이렉트
+  // } else {
     next(); // 통과
-  }
+  // }
 };
 
 const routes = [

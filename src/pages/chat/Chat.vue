@@ -45,6 +45,7 @@
       <!-- 채팅 목록 -->
       <div class="chat-list">
         <ChatCard v-for="room in chatStore.chatRooms" :key="room.idx" :room="room" />
+        <ChatCard :key="1" :room="testRoom" />
       </div>
     </div>
   </div>
@@ -88,6 +89,18 @@ import { useChatStore } from "../../stores/useChatStore.js";
 import ChatCard from "./components/ChatCard.vue";
 import { handleChatRoomError } from "../../utils/errorHandler";
 import { useRouter } from "vue-router";
+
+//
+const testRoom = {
+  idx: 999999,
+  title: "테스트 채팅방",
+  hashtags: ["#테스트", "#임시방"],
+  participants: 1,
+  maxParticipants: 10,
+  isParticipating: true,
+  startDateTime: "2026-04-11T15:00:00",
+};
+
 
 const router = useRouter();
 const chatStore = useChatStore();

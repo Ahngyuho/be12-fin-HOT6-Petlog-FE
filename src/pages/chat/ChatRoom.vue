@@ -79,12 +79,13 @@ const loadPreviousMessages = async () => {
 };
 onMounted(() => {
   console.log(currentUserId);
-  chatStore.getRoomInfo(chatroomIdx);
-  chatStore.connectStomp(chatroomIdx, () => {
-    console.log("🟢 연결된 후 실행할 추가 작업!");
-  });
-  chatStore.loadMessages(chatroomIdx);
-  chatStore.getUserPets();
+  // chatStore.getRoomInfo(chatroomIdx);
+  // chatStore.connectStomp(chatroomIdx, () => {
+  //   console.log("🟢 연결된 후 실행할 추가 작업!");
+  // });
+  chatStore.connectSocketIO(chatroomIdx);
+  // chatStore.loadMessages(chatroomIdx);
+  // chatStore.getUserPets();
 });
 
 const isModalOpen = ref(false);
