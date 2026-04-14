@@ -41,19 +41,22 @@ export const useChatStore = defineStore("chat", {
       });
     },
 
+    // 이벤트 리스너 등록 역할 메서드
     bindSocketEvents() {
-    if (!this.socketClient) return;
+  if (!this.socketClient) return;
 
-    this.socketClient.off("chat-message");
-    this.socketClient.on("chat-message", (msg) => {
-      this.messages.push(msg);
-    });
+  this.socketClient.off("chat-message");
 
-    this.socketClient.off("disconnect");
-    this.socketClient.on("disconnect", (reason) => {
-      console.log("연결 종료:", reason);
-    });
-  },
+  this.socketClient.on("chat-message", (msg) => {
+    console.log("수신 메시지:", msg);
+    this.messages.push(msg);
+  });
+
+  this.socketClient.off("disconnect");
+  this.socketClient.on("disconnect", (reason) => {
+    console.log("소켓 연결 종료:", reason);
+  });
+},
 
     async leaveChatRoom(roomIdx) {
       await axios.delete(`/api/chat/chatroom/${roomIdx}/leave`);
@@ -83,34 +86,34 @@ export const useChatStore = defineStore("chat", {
     },
 
 connectSocketIO(roomId, onConnectedCallback) {
-  const socket = io("ws://localhost:3000", {
-    reconnectionDelayMax: 10000,
-    auth: {
-      token: "123",
-    },
-    query: {
-      "my-key": "my-value",
-    },
-  });
+  const socket = io("http://192.168.0.101", {
+  path: "/api/ws/socket.io",
+  transports: ["websocket"],
+  withCredentials: true,
+});
 
   this.socketClient = socket;
 
   this.bindSocketEvents();
 
-
   socket.on("connect", () => {
-    console.log("연결 성공");
-    socket.emit("join-room", { roomId });
+    console.log("소켓 연결 성공:", socket.id);
+
+    socket.emit("join-room", { roomId }, (ack) => {
+      console.log("join-room ack:", ack);
+    });
+
+    if (onConnectedCallback) onConnectedCallback();
   });
 
   socket.on("connect_error", (err) => {
-    console.error("연결 실패:", err.message);
-  });
-
-  socket.on("disconnect", (reason) => {
-    console.log("연결 종료:", reason);
+    console.error("연결 에러:", err.message);
   });
 },
+
+
+
+
     connectStomp(roomId, onConnectedCallback) {
       const socket = new SockJS("/api/ws");
 
@@ -154,6 +157,9 @@ connectSocketIO(roomId, onConnectedCallback) {
     return;
   }
 
+  console.log(msg);
+
+  //여기서 문제? 
   this.socketClient.emit("chat-message", msg, (ack) => {
     console.log("서버 ack:", ack);
   });
